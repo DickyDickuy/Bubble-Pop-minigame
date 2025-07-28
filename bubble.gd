@@ -1,65 +1,76 @@
 extends Node2D
-@export var pop_sounds: Array[AudioStream]
+
+# (DITAMBAHKAN KEMBALI) Variabel untuk menampung sampel suara Anda.
+@export var typing_sounds: Array[AudioStream]
+
+# Variabel untuk menyimpan kalimat yang berhubungan dengan bubble ini.
+var positive_affirmation: String
 
 var initial_y_position: float
 var time: float = 0.0
-var float_speed: float = 1.5
-var float_amplitude: float = 5.0
+# (DIPERBAIKI) Nilai agar bubble mengambang dengan halus tapi tetap terlihat.
+var float_speed: float = 0.5 
+var float_amplitude: float = 10.0
 
 func _ready():
 	initial_y_position = position.y
-	# Start at a random point in the sine wave to desynchronize bubbles
 	time = randf() * 10.0
 
+# (DIKEMBALIKAN) Fungsi agar bubble mengambang.
 func _process(delta):
 	time += delta
 	position.y = initial_y_position + sin(time * float_speed) * float_amplitude
 
+# Fungsi baru untuk mengatur teks pada bubble.
+func setup(positive: String):
+	positive_affirmation = positive
+	$TypingLabel.text = positive_affirmation
 
-func _on_area_2d_mouse_entered() -> void:
-	print("Mouse entered!")
+# (DIPERBAIKI) Fungsi untuk memberikan feedback saat mengetik.
+func play_typing_feedback():
+	if not $Sprite2D.visible:
+		return
+
+	# Mainkan animasi squish.
 	$AnimationPlayer.play("squish")
-	
-			# Play the pop sound
-	if not pop_sounds.is_empty():
-		$AudioStreamPlayer2D.stream = pop_sounds.pick_random()
+	# Mainkan suara secara acak dari array.
+	if not typing_sounds.is_empty():
+		$AudioStreamPlayer2D.stream = typing_sounds.pick_random()
 		$AudioStreamPlayer2D.play()
 
-func _on_area_2d_input_event(viewport, event, shape_idx):
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
+# Fungsi untuk meledakkan bubble.
+func pop():
+	# Sembunyikan semua elemen visual.
+	$Sprite2D.hide()
+	$TypingLabel.hide()
 
-		if not $Sprite2D.visible:
-			return
+	# Mainkan efek partikel.
+	var particles_instance = $GPUParticles2D.duplicate()
+	get_parent().add_child(particles_instance)
+	particles_instance.global_position = global_position
+	particles_instance.emitting = true
+	var particle_timer = Timer.new()
+	particle_timer.wait_time = particles_instance.lifetime
+	particle_timer.one_shot = true
+	particle_timer.timeout.connect(particles_instance.queue_free)
+	particles_instance.add_child(particle_timer)
+	particle_timer.start()
 
-		# Sembunyikan bubble dan matikan collision-nya.
-		$Sprite2D.hide()
-		$Area2D/CollisionShape2D.disabled = true
+	# Set timer untuk respawn.
+	var respawn_timer = get_tree().create_timer(2.0)
+	respawn_timer.timeout.connect(_reset_bubble)
 
-		# --- LOGIKA PARTIKEL BARU YANG STABIL ---
-		# Duplikasi node partikel asli, JANGAN pindahkan yang asli.
-		var particles_instance = $GPUParticles2D.duplicate()
+# Fungsi untuk memunculkan kembali bubble.
 
-		# Tambahkan duplikat ke scene utama.
-		get_parent().add_child(particles_instance)
-
-		# Atur posisi dan nyalakan partikelnya.
-		particles_instance.global_position = global_position
-		particles_instance.emitting = true
-
-		# Timer untuk menghapus HANYA duplikat partikelnya setelah selesai.
-		var particle_timer = Timer.new()
-		particle_timer.wait_time = particles_instance.lifetime
-		particle_timer.one_shot = true
-		particle_timer.timeout.connect(particles_instance.queue_free)
-		particles_instance.add_child(particle_timer)
-		particle_timer.start()
-
-		# --- LOGIKA RESPAWN (TETAP SAMA) ---
-		# Set timer untuk memunculkan kembali BUBBLE ini setelah 2 detik.
-		var respawn_timer = get_tree().create_timer(2.0)
-		respawn_timer.timeout.connect(_reset_bubble)
-
+# Fungsi untuk memunculkan kembali bubble.
 func _reset_bubble():
-	# Fungsi ini akan dipanggil untuk memunculkan kembali bubble.
+	# (FIX) Atur skala ke nol SEBELUM menampilkannya agar tidak berkedip.
+	$Sprite2D.scale = Vector2.ZERO
+	# Tampilkan kembali sprite dan label.
 	$Sprite2D.show()
-	$Area2D/CollisionShape2D.disabled = false
+	$TypingLabel.show()
+	# Aktifkan kembali collision.
+	# Kita tidak menggunakan Area2D lagi, jadi baris ini bisa dihapus atau dikomentari.
+	# $Area2D/CollisionShape2D.disabled = false 
+	# (BARU) Mainkan animasi respawn.
+	$AnimationPlayer.play("respawn")
